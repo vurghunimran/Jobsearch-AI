@@ -229,6 +229,79 @@ What it needs:
 | **Fly.io / Railway / Render** | ~$5/mo | Works, but attach a **persistent volume** or SQLite is wiped on redeploy, and **disable scale-to-zero** or the cron never fires (Render's free tier sleeps; Fly needs `auto_stop_machines = false`). |
 | **Always-on desktop** | free | Fine. Just confirm it doesn't sleep — set the cron to a time you know it's awake. |
 
+### Raspberry Pi / home server, step by step
+
+The best option if you have the hardware: your CV never leaves the house, and
+there is no monthly bill.
+
+**Use 64-bit Raspberry Pi OS.** On 64-bit every dependency installs from a
+prebuilt wheel in a couple of minutes. On 32-bit, `uvloop`, `httptools`,
+`markupsafe` and `sqlalchemy` have no wheels and compile from source — slow,
+and a 1 GB Pi can run out of memory doing it. Check with `uname -m`: `aarch64`
+is good, `armv7l` is the 32-bit build.
+
+A Pi 4 (2 GB+) is comfortable. A Pi 3 or Zero 2 W works but is slow to install.
+
+```bash
+sudo apt update && sudo apt install -y python3-venv git
+
+git clone -b claude/job-application-ai-agent-gqk916 \
+    https://github.com/vurghunimran/Jobsearch-AI ~/Jobsearch-AI
+cd ~/Jobsearch-AI
+
+python3 -m venv .venv
+.venv/bin/pip install -e .
+
+cp .env.example .env        # add ANTHROPIC_API_KEY and your SMTP details
+.venv/bin/jobsearch init    # writes data/profile.yaml
+# put your CV in data/cv/, then fill in data/profile.yaml
+.venv/bin/jobsearch doctor
+```
+
+Set the timezone in `.env` — `DIGEST_CRON` is interpreted in it, and a Pi often
+defaults to UTC:
+
+```bash
+TIMEZONE=Europe/Tallinn      # yours
+DIGEST_CRON=0 8 * * *        # 08:00 local
+DASHBOARD_HOST=0.0.0.0       # so you can reach it from your phone
+DASHBOARD_TOKEN=             # see the note below before setting this
+```
+
+Run it as a service so it survives reboots and power cuts:
+
+```bash
+sudo cp deploy/jobsearch.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now jobsearch
+
+systemctl status jobsearch
+journalctl -u jobsearch -f      # watch the first search run
+```
+
+The unit assumes `/home/pi/Jobsearch-AI` and user `pi`; edit the paths if
+yours differ. Docker works on the Pi too (`docker compose up -d`), but native
+saves ~100 MB of RAM and boots faster — worth it on a small Pi.
+
+**Reaching it from your phone.** Install
+[Tailscale](https://tailscale.com/download) on the Pi and your phone, then set
+`PUBLIC_BASE_URL=http://<pi-tailscale-name>:8765`. The dashboard is reachable
+from anywhere without opening a single port on your router, and you can leave
+`DASHBOARD_TOKEN` empty on a private tailnet. **Do not port-forward 8765 from
+your router** — that puts your CV and personal details on the public internet.
+If you must, set a token and put Caddy in front for HTTPS.
+
+**Two Pi-specific habits.** SD cards wear out and do fail: run from a USB SSD
+if you can, and back up the database, which holds your whole application
+history —
+
+```bash
+sqlite3 data/jobsearch.db ".backup '/mnt/usb/jobsearch-$(date +%F).db'"
+```
+
+A weekly `cron` entry for that line is enough.
+
+
 ### Securing a remote deployment
 
 The compose file binds to `127.0.0.1` deliberately. Don't change that to
@@ -338,7 +411,7 @@ you on the right side of that.
 
 ```bash
 pip install -e ".[dev]"
-pytest              # 146 tests, no network and no API key needed
+pytest              # 149 tests, no network and no API key needed
 ruff check jobsearch tests
 ruff format jobsearch tests
 ```
@@ -350,6 +423,7 @@ its response shape.
 ```
 jobsearch/
 ├── config.py          settings
+├── logging_setup.py   log config (uvicorn only configures its own)
 ├── models.py          database tables
 ├── llm.py             Claude wrapper
 ├── pipeline.py        the daily run

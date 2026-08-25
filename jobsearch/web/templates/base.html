@@ -27,6 +27,13 @@
   threshold {{ settings.min_score }}% ·
   max {{ settings.max_new_applications_per_day }}/day ·
   auto-submit on approval {{ 'on' if settings.auto_submit_on_approval else 'off' }}
+  <br>
+  {% if next_run %}
+    Next search: {{ next_run.strftime('%a %d %b, %H:%M %Z') }}
+  {% else %}
+    <span class="warn-text">No scheduler running — no daily search will happen.
+      Use “Run search”, or check DIGEST_CRON and TIMEZONE.</span>
+  {% endif %}
 </footer>
 </body>
 </html>

@@ -188,3 +188,33 @@ class TestAuth:
         # without the query string.
         assert protected.get("/healthz").status_code == 200
         assert protected.get("/static/app.css").status_code == 200
+
+
+class TestSchedulerVisibility:
+    """A headless box must be able to show whether tomorrow's search is armed."""
+
+    def test_footer_shows_when_the_next_search_runs(self, client):
+        body = client.get("/").text
+        assert "Next search:" in body
+        assert "No scheduler running" not in body
+
+    def test_footer_warns_loudly_when_no_scheduler_is_running(
+        self, settings, profile, seeded, monkeypatch
+    ):
+        # A silently dead scheduler means no job postings for a week and no
+        # sign anything is wrong, so the dashboard has to say so.
+        monkeypatch.setattr(
+            "jobsearch.scheduler.start_scheduler",
+            lambda s=None: (_ for _ in ()).throw(RuntimeError("bad cron")),
+        )
+        with TestClient(create_app(settings)) as client:
+            body = client.get("/").text
+        assert "No scheduler running" in body
+        assert "DIGEST_CRON" in body
+
+    def test_the_scheduled_job_exists_with_a_next_run_time(self, settings, profile, seeded):
+        app = create_app(settings)
+        with TestClient(app):
+            job = app.state.scheduler.get_job("daily-discovery")
+            assert job is not None
+            assert job.next_run_time is not None

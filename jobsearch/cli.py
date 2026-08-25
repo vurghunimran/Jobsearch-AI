@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import logging
 
 import typer
 from rich.console import Console
@@ -13,6 +12,7 @@ from sqlmodel import select
 
 from jobsearch.config import SubmitMode, get_settings
 from jobsearch.db import init_db, session_scope
+from jobsearch.logging_setup import configure_logging
 from jobsearch.models import Application, ApplicationStatus, Job, JobStatus
 
 app = typer.Typer(
@@ -23,12 +23,7 @@ console = Console()
 
 
 def _setup_logging(verbose: bool) -> None:
-    logging.basicConfig(
-        level=logging.DEBUG if verbose else logging.INFO,
-        format="%(asctime)s %(levelname)-7s %(name)s: %(message)s",
-        datefmt="%H:%M:%S",
-    )
-    logging.getLogger("httpx").setLevel(logging.WARNING)
+    configure_logging(verbose)
 
 
 @app.command()

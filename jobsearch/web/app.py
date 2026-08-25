@@ -25,6 +25,7 @@ from jobsearch.apply.service import submit_application
 from jobsearch.config import Settings, get_settings
 from jobsearch.db import get_engine, init_db, session_scope
 from jobsearch.documents.render import to_html
+from jobsearch.logging_setup import configure_logging
 from jobsearch.models import (
     Application,
     ApplicationStatus,
@@ -71,16 +72,22 @@ COOKIE_MAX_AGE = 60 * 60 * 24 * 30
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     settings = get_settings()
+    configure_logging()
     settings.ensure_dirs()
     init_db(settings)
     scheduler = None
+    app.state.scheduler = None
     try:
         from jobsearch.scheduler import start_scheduler
 
         scheduler = start_scheduler(settings)
         app.state.scheduler = scheduler
     except Exception as exc:  # noqa: BLE001 - the dashboard is useful without a scheduler
-        log.warning("Scheduler did not start: %s", exc)
+        log.warning(
+            "Scheduler did NOT start, so no daily search will run: %s. "
+            "Run `jobsearch discover` by hand, or fix DIGEST_CRON/TIMEZONE.",
+            exc,
+        )
     yield
     if scheduler is not None:
         scheduler.shutdown(wait=False)
@@ -128,7 +135,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return templates.TemplateResponse(
             request=request,
             name=template,
-            context={"settings": settings, "counts": counts, **context},
+            context={
+                "settings": settings,
+                "counts": counts,
+                "next_run": _next_run(app),
+                **context,
+            },
         )
 
     # ---------------------------------------------------------------- views
@@ -283,6 +295,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
 
 # -------------------------------------------------------------------- helpers
+
+
+def _next_run(app: FastAPI) -> datetime | None:
+    """When the daily search fires next, or None if no scheduler is running."""
+    scheduler = getattr(app.state, "scheduler", None)
+    if scheduler is None:
+        return None
+    job = scheduler.get_job("daily-discovery")
+    return getattr(job, "next_run_time", None) if job else None
 
 
 def _get(session: Session, application_id: int) -> Application:

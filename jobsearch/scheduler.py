@@ -39,5 +39,11 @@ def start_scheduler(settings: Settings | None = None) -> AsyncIOScheduler:
     if settings.run_on_startup:
         scheduler.add_job(_run, args=[settings], id="startup-discovery", replace_existing=True)
     scheduler.start()
-    log.info("Scheduler started: '%s' (%s)", settings.digest_cron, settings.timezone)
+    job = scheduler.get_job("daily-discovery")
+    log.info(
+        "Scheduler started: '%s' (%s). Next search: %s",
+        settings.digest_cron,
+        settings.timezone,
+        getattr(job, "next_run_time", "unknown"),
+    )
     return scheduler
