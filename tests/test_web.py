@@ -165,7 +165,8 @@ class TestAuth:
         protected.get("/?token=s3cret")
         assert protected.cookies.get("jobsearch_token") == "s3cret"
         assert protected.get("/applications").status_code == 200
-        assert protected.get(f"/application/{protected.seeded['application_id']}").status_code == 200
+        detail = protected.get(f"/application/{protected.seeded['application_id']}")
+        assert detail.status_code == 200
 
     def test_post_actions_are_protected_too(self, settings, profile, seeded, monkeypatch):
         from jobsearch.config import get_settings
