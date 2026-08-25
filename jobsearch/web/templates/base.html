@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}jobsearch-ai{% endblock %}</title>
+  <link rel="stylesheet" href="/static/app.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='13' font-size='13'>&#128188;</text></svg>">
+</head>
+<body>
+<header class="topbar">
+  <a class="brand" href="/">jobsearch<span>-ai</span></a>
+  <nav>
+    <a href="/">Queue{% if counts.pending %} <b>{{ counts.pending }}</b>{% endif %}</a>
+    <a href="/applications">History</a>
+    <a href="/jobs">All jobs</a>
+  </nav>
+  <form method="post" action="/run" class="inline">
+    <button class="ghost" title="Search all your sources now">Run search</button>
+  </form>
+</header>
+<main>
+  {% block content %}{% endblock %}
+</main>
+<footer>
+  Mode: <code>{{ settings.submit_mode.value }}</code> ·
+  threshold {{ settings.min_score }}% ·
+  max {{ settings.max_new_applications_per_day }}/day ·
+  auto-submit on approval {{ 'on' if settings.auto_submit_on_approval else 'off' }}
+</footer>
+</body>
+</html>

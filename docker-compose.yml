@@ -1,0 +1,15 @@
+services:
+  jobsearch:
+    build: .
+    image: jobsearch-ai:latest
+    container_name: jobsearch-ai
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATA_DIR: /data
+      DASHBOARD_HOST: 0.0.0.0
+    ports:
+      # Bound to localhost only. Your CV and personal data are behind this port.
+      - "127.0.0.1:8765:8765"
+    volumes:
+      - ./data:/data
