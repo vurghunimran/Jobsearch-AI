@@ -53,7 +53,7 @@
       <div class="qa {{ 'needs-check' if answer.needs_human else '' }}">
         <label for="answer_{{ loop.index0 }}">{{ answer.question }}</label>
         {% if answer.needs_human %}
-          <p class="warn-text small">Guessed{% if answer.note %} — {{ answer.note }}{% endif %}.
+          <p class="warn-text small">Guessed{% if answer.note %} — {{ answer.note.rstrip('.') }}{% endif %}.
              Editing or saving this marks it confirmed.</p>
         {% endif %}
         <textarea id="answer_{{ loop.index0 }}" name="answer_{{ loop.index0 }}" rows="2">{{ answer.answer }}</textarea>
