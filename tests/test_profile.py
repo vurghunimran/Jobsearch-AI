@@ -82,6 +82,33 @@ class TestProfileBrief:
     def test_empty_profile_does_not_crash(self):
         assert isinstance(profile_brief(Profile()), str)
 
+    def test_an_ongoing_role_is_marked_present(self, profile):
+        from jobsearch.profile.schema import Experience
+
+        profile.experience = [Experience(title="Analyst", company="Acme", start="2026-03", end="")]
+        brief = profile_brief(profile)
+        # Bare "2026-03" reads as a point in time and invites a writer to
+        # describe a current role as if it had already ended.
+        assert "2026-03 – present" in brief
+
+    def test_a_degree_without_a_named_qualification_reads_cleanly(self, profile):
+        from jobsearch.profile.schema import Education
+
+        profile.education = [
+            Education(degree="", field_of_study="European Studies", institution="Maastricht")
+        ]
+        brief = profile_brief(profile)
+        assert "European Studies, Maastricht" in brief
+        assert " in European Studies" not in brief, "no dangling 'in' when degree is blank"
+
+    def test_a_named_degree_still_reads_normally(self, profile):
+        from jobsearch.profile.schema import Education
+
+        profile.education = [
+            Education(degree="BA", field_of_study="International Studies", institution="ADA")
+        ]
+        assert "BA in International Studies, ADA" in profile_brief(profile)
+
 
 class TestIdentity:
     def test_splits_a_full_name_when_parts_are_absent(self):

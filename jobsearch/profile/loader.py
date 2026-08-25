@@ -85,6 +85,20 @@ def cv_text(profile: Profile, settings: Settings | None = None) -> str:
         return ""
 
 
+def _period(start: str, end: str) -> str:
+    """Render a date range.
+
+    An open end means the role is current. Writing just the start date reads as
+    a single point in time, which invites a model to describe a multi-year job
+    as though it lasted a month.
+    """
+    if start and end:
+        return f"{start} – {end}"
+    if start:
+        return f"{start} – present"
+    return end or "n/a"
+
+
 def profile_brief(profile: Profile) -> str:
     """A compact, prompt-friendly rendering of the structured profile."""
     ident = profile.identity
@@ -122,7 +136,7 @@ def profile_brief(profile: Profile) -> str:
     if profile.experience:
         lines.append("\nExperience:")
         for item in profile.experience:
-            period = " – ".join(x for x in (item.start, item.end) if x) or "n/a"
+            period = _period(item.start, item.end)
             head = f"- {item.title} at {item.company}"
             if item.location:
                 head += f" ({item.location})"
@@ -137,8 +151,10 @@ def profile_brief(profile: Profile) -> str:
     if profile.education:
         lines.append("\nEducation:")
         for edu in profile.education:
-            period = " – ".join(x for x in (edu.start, edu.end) if x) or "n/a"
-            line = f"- {edu.degree} in {edu.field_of_study}, {edu.institution}"
+            period = _period(edu.start, edu.end)
+            # An unstated degree type is common; don't emit a dangling "in".
+            qualification = " in ".join(x for x in (edu.degree, edu.field_of_study) if x)
+            line = f"- {qualification or 'Studies'}, {edu.institution}"
             if edu.location:
                 line += f" ({edu.location})"
             lines.append(f"{line}, {period}")
