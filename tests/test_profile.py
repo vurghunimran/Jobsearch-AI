@@ -74,10 +74,44 @@ class TestProfileBrief:
         assert "Tallinn" in brief
         assert "Work authorization" in brief
 
-    def test_states_sponsorship_either_way(self, profile):
-        assert "no sponsorship required" in profile_brief(profile)
+    def test_names_the_countries_work_rights_actually_cover(self, profile):
+        # Work rights are country-specific: a Dutch permit is not an EU-wide
+        # one. A writer told only "no sponsorship required" could imply the
+        # candidate is free to take a job anywhere, which is a false claim.
+        profile.work_authorization.authorized_countries = ["Azerbaijan", "Netherlands"]
+        profile.work_authorization.requires_sponsorship = False
+        brief = profile_brief(profile)
+        assert "may work without sponsorship in Azerbaijan, Netherlands" in brief
+        assert "would need sponsorship anywhere else" in brief
+
+    def test_says_so_when_sponsorship_is_needed_everywhere(self, profile):
+        profile.work_authorization.authorized_countries = []
         profile.work_authorization.requires_sponsorship = True
         assert "requires visa sponsorship" in profile_brief(profile)
+
+    def test_says_so_when_no_sponsorship_is_needed_at_all(self, profile):
+        profile.work_authorization.authorized_countries = []
+        profile.work_authorization.requires_sponsorship = False
+        assert "no sponsorship required" in profile_brief(profile)
+
+    def test_notice_period_and_relocation_targets_reach_the_writer(self, profile):
+        profile.work_authorization.notice_period = "1.5 months"
+        profile.work_authorization.willing_to_relocate = True
+        profile.work_authorization.relocation_targets = ["Netherlands"]
+        brief = profile_brief(profile)
+        assert "notice period 1.5 months" in brief
+        assert "willing to relocate (Netherlands)" in brief
+
+    def test_salary_expectation_reaches_the_scorer(self, profile):
+        # Without this the setting is dead config: nothing else reads it.
+        profile.preferences.min_salary = 2000
+        profile.preferences.salary_period = "month"
+        profile.preferences.salary_currency = "EUR"
+        assert "at least 2,000 EUR per month" in profile_brief(profile)
+
+    def test_no_salary_line_when_none_is_set(self, profile):
+        profile.preferences.min_salary = None
+        assert "Compensation expectation" not in profile_brief(profile)
 
     def test_empty_profile_does_not_crash(self):
         assert isinstance(profile_brief(Profile()), str)

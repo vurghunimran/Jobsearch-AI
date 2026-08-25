@@ -88,6 +88,10 @@ class Preferences(BaseModel):
     """intern | junior | mid | senior | lead | manager — empty means no constraint."""
 
     min_salary: int | None = None
+    """Advisory, not a hard filter — posted salaries are free text and rarely
+    parseable. It is given to the scorer, which flags clearly underpaid roles."""
+    salary_period: str = "year"
+    """How min_salary is expressed: "year" or "month"."""
     salary_currency: str = "EUR"
     exclude_companies: list[str] = Field(default_factory=list)
     max_posting_age_days: int = 30

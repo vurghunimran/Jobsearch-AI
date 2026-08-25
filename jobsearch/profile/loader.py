@@ -85,6 +85,36 @@ def cv_text(profile: Profile, settings: Settings | None = None) -> str:
         return ""
 
 
+def _work_authorization(auth) -> str:
+    """State where the candidate may work, and where they may not.
+
+    Work rights are country-specific: a Dutch permit is not an EU-wide one. A
+    bare "no sponsorship required" would let a writer imply the candidate can
+    take a job in any country, which is exactly the kind of false claim that
+    gets an application binned.
+    """
+    bits: list[str] = []
+    if auth.authorized_countries:
+        countries = ", ".join(auth.authorized_countries)
+        bits.append(f"may work without sponsorship in {countries}")
+        bits.append(
+            "would need sponsorship anywhere else"
+            if not auth.requires_sponsorship
+            else "requires visa sponsorship, including in the countries listed"
+        )
+    else:
+        bits.append(
+            "requires visa sponsorship" if auth.requires_sponsorship else "no sponsorship required"
+        )
+    if auth.current_visa_status:
+        bits.append(f"current status: {auth.current_visa_status}")
+    if auth.notice_period:
+        bits.append(f"notice period {auth.notice_period}")
+    if auth.willing_to_relocate:
+        bits.append(f"willing to relocate ({', '.join(auth.relocation_targets) or 'open'})")
+    return "; ".join(bits)
+
+
 def _period(start: str, end: str) -> str:
     """Render a date range.
 
@@ -119,19 +149,14 @@ def profile_brief(profile: Profile) -> str:
     if profile.certifications:
         lines.append(f"Certifications: {', '.join(profile.certifications)}")
 
-    auth = profile.work_authorization
-    auth_bits = []
-    if auth.authorized_countries:
-        auth_bits.append(f"authorized in {', '.join(auth.authorized_countries)}")
-    auth_bits.append(
-        "requires visa sponsorship" if auth.requires_sponsorship else "no sponsorship required"
-    )
-    if auth.notice_period:
-        auth_bits.append(f"notice period {auth.notice_period}")
-    if auth.willing_to_relocate:
-        targets = ", ".join(auth.relocation_targets) or "open"
-        auth_bits.append(f"willing to relocate ({targets})")
-    lines.append("Work authorization: " + "; ".join(auth_bits))
+    lines.append("Work authorization: " + _work_authorization(profile.work_authorization))
+
+    prefs = profile.preferences
+    if prefs.min_salary:
+        lines.append(
+            f"Compensation expectation: at least {prefs.min_salary:,} "
+            f"{prefs.salary_currency} per {prefs.salary_period}."
+        )
 
     if profile.experience:
         lines.append("\nExperience:")
@@ -243,7 +268,8 @@ preferences:
 
   employment_types: ["full_time"]   # full_time | part_time | contract | internship
   seniority: []                     # intern | junior | mid | senior | lead | manager
-  min_salary: null
+  min_salary: null              # advisory — given to the scorer, not a hard filter
+  salary_period: "year"         # "year" or "month"
   salary_currency: "EUR"
   exclude_companies: []
   max_posting_age_days: 30
