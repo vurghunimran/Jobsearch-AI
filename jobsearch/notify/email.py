@@ -7,6 +7,7 @@ import logging
 import smtplib
 from email.message import EmailMessage
 from typing import Any
+from urllib.parse import quote
 
 from sqlmodel import select
 
@@ -79,6 +80,19 @@ def _load(application_ids: list[int], settings: Settings) -> list[tuple[Applicat
     return rows
 
 
+def _link(settings: Settings, path: str = "/") -> str:
+    """A dashboard URL that signs you in.
+
+    The digest is usually opened on a phone that has never visited the
+    dashboard, so a protected instance needs the token in the link itself.
+    The dashboard swaps it for a cookie on arrival.
+    """
+    url = f"{settings.resolved_base_url}{path}"
+    if settings.dashboard_token:
+        url += f"?token={quote(settings.dashboard_token)}"
+    return url
+
+
 def _subject(rows: list[tuple[Application, Job]]) -> str:
     top = rows[0][1]
     if len(rows) == 1:
@@ -90,7 +104,7 @@ def _plain(rows: list[tuple[Application, Job]], stats: dict[str, Any], settings:
     lines = [
         f"{len(rows)} application(s) are drafted and waiting for your approval.",
         "",
-        f"Review them at: {settings.resolved_base_url}/",
+        f"Review them at: {_link(settings)}",
         "",
     ]
     for application, job in rows:
@@ -99,7 +113,7 @@ def _plain(rows: list[tuple[Application, Job]], stats: dict[str, Any], settings:
             f"  {job.location or 'location not stated'} · "
             f"{job.remote_type or 'work mode not stated'}",
             f"  {job.rationale}",
-            f"  Review: {settings.resolved_base_url}/application/{application.id}",
+            f"  Review: {_link(settings, f'/application/{application.id}')}",
             "",
         ]
     lines += [
@@ -113,7 +127,6 @@ def _plain(rows: list[tuple[Application, Job]], stats: dict[str, Any], settings:
 
 
 def _html(rows: list[tuple[Application, Job]], stats: dict[str, Any], settings: Settings) -> str:
-    base = settings.resolved_base_url
     cards = []
     for application, job in rows:
         score = job.score or 0
@@ -135,7 +148,7 @@ def _html(rows: list[tuple[Application, Job]], stats: dict[str, Any], settings: 
             {html.escape(job.company)}{" · " + html.escape(meta) if meta else ""}</div>
           <div style="font:400 14px/1.55 -apple-system,Segoe UI,Roboto,sans-serif;color:#374151;
                       margin:10px 0 14px;">{html.escape(job.rationale)}</div>
-          <a href="{base}/application/{application.id}"
+          <a href="{_link(settings, f"/application/{application.id}")}"
              style="display:inline-block;background:#111827;color:#fff;text-decoration:none;
                     font:600 14px/1 -apple-system,Segoe UI,Roboto,sans-serif;
                     padding:10px 16px;border-radius:7px;">Review &amp; approve</a>
@@ -161,6 +174,6 @@ def _html(rows: list[tuple[Application, Job]], stats: dict[str, Any], settings: 
   {"".join(cards)}
   <tr><td style="padding-top:8px;border-top:1px solid #e5e7eb;">
     <div style="font:400 12px/1.5 -apple-system,Segoe UI,Roboto,sans-serif;color:#9ca3af;">
-      {summary}<br><a href="{base}/" style="color:#6b7280;">Open the dashboard</a></div>
+      {summary}<br><a href="{_link(settings)}" style="color:#6b7280;">Open the dashboard</a></div>
   </td></tr>
 </table></body></html>"""

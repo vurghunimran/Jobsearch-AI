@@ -136,14 +136,54 @@ class TestActions:
 
 
 class TestAuth:
-    def test_token_gate_blocks_and_admits(self, settings, profile, seeded, monkeypatch):
-        monkeypatch.setattr(settings, "dashboard_token", "s3cret")
+    """The token gate matters only when the dashboard is reachable remotely."""
+
+    @pytest.fixture
+    def protected(self, settings, profile, seeded, monkeypatch):
         from jobsearch.config import get_settings
 
-        get_settings.cache_clear()
         monkeypatch.setenv("DASHBOARD_TOKEN", "s3cret")
+        get_settings.cache_clear()
+        resolved = get_settings()
+        with TestClient(create_app(resolved)) as test_client:
+            test_client.seeded = seeded
+            test_client.settings = resolved
+            yield test_client
+
+    def test_blocks_without_a_token(self, protected):
+        assert protected.get("/").status_code == 401
+
+    def test_admits_with_the_token_in_the_url(self, protected):
+        assert protected.get("/?token=s3cret").status_code == 200
+
+    def test_rejects_a_wrong_token(self, protected):
+        assert protected.get("/?token=nope").status_code == 401
+
+    def test_a_url_token_is_exchanged_for_a_cookie(self, protected):
+        # Arriving from the digest email must sign you in, so that every link
+        # from there on works without the token in the query string.
+        protected.get("/?token=s3cret")
+        assert protected.cookies.get("jobsearch_token") == "s3cret"
+        assert protected.get("/applications").status_code == 200
+        assert protected.get(f"/application/{protected.seeded['application_id']}").status_code == 200
+
+    def test_post_actions_are_protected_too(self, settings, profile, seeded, monkeypatch):
+        from jobsearch.config import get_settings
+
+        monkeypatch.setenv("DASHBOARD_TOKEN", "s3cret")
+        get_settings.cache_clear()
         with TestClient(create_app(get_settings())) as client:
-            assert client.get("/").status_code == 401
-            assert client.get("/?token=s3cret").status_code == 200
-            # /healthz stays open so container health checks keep working.
-            assert client.get("/healthz").status_code == 200
+            response = client.post(
+                f"/application/{seeded['application_id']}/approve", follow_redirects=False
+            )
+            assert response.status_code == 401
+        with session_scope(settings) as session:
+            assert session.get(Application, seeded["application_id"]).status is (
+                ApplicationStatus.pending_review
+            ), "an unauthenticated POST must not change anything"
+
+    def test_healthz_and_static_stay_open(self, protected):
+        # The container health check has no token, and the browser fetches CSS
+        # without the query string.
+        assert protected.get("/healthz").status_code == 200
+        assert protected.get("/static/app.css").status_code == 200

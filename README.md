@@ -211,6 +211,89 @@ default you inherit.
 
 ---
 
+## Deploying it somewhere that stays on
+
+The daily search fires from an in-process cron, so **the box has to be awake at
+`DIGEST_CRON` time**. A laptop that sleeps at night will silently skip runs.
+What it needs:
+
+- an always-on process (not serverless, not scale-to-zero)
+- a persistent disk for `data/` — SQLite, your CV, and generated packets
+- 512 MB RAM is enough, 1 GB comfortable; CPU is near-idle between runs
+- outbound HTTPS to the job boards and the Claude API
+
+| Where | Cost | Notes |
+|---|---|---|
+| **Home server / Raspberry Pi** | free | Best privacy — your CV never leaves the house. A Pi 4 handles it easily. |
+| **Small VPS** (Hetzner, DigitalOcean, Vultr) | ~€4–6/mo | The usual choice. `docker compose up -d` and it's done. Secure it as below. |
+| **Fly.io / Railway / Render** | ~$5/mo | Works, but attach a **persistent volume** or SQLite is wiped on redeploy, and **disable scale-to-zero** or the cron never fires (Render's free tier sleeps; Fly needs `auto_stop_machines = false`). |
+| **Always-on desktop** | free | Fine. Just confirm it doesn't sleep — set the cron to a time you know it's awake. |
+
+### Securing a remote deployment
+
+The compose file binds to `127.0.0.1` deliberately. Don't change that to
+`0.0.0.0` and call it done — the dashboard holds your CV, your personal
+details and your drafted applications. Two good options:
+
+**Tailscale (recommended).** Install it on the VPS and your phone. The
+dashboard stays completely off the public internet, and you reach it from
+anywhere as if it were local:
+
+```bash
+# .env
+PUBLIC_BASE_URL=http://<your-tailscale-hostname>:8765
+DASHBOARD_TOKEN=            # optional on a tailnet
+```
+
+**Public with TLS.** Put Caddy or nginx in front for HTTPS and set a token:
+
+```bash
+# .env
+PUBLIC_BASE_URL=https://jobs.yourdomain.com
+DASHBOARD_TOKEN=$(openssl rand -hex 24)
+```
+
+With a token set, the digest email's links carry it and the dashboard swaps it
+for a cookie on arrival — so tapping a link on your phone signs you in once and
+every link after that just works. Every route is gated except `/healthz` and
+`/static`.
+
+### Getting the notifications
+
+The digest is plain SMTP, so any provider works. For personal use a Gmail
+[app password](https://myaccount.google.com/apppasswords) is the fastest route
+(a normal account password will not work with 2FA enabled):
+
+```bash
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USERNAME=you@gmail.com
+SMTP_PASSWORD=<16-character app password>
+SMTP_FROM=you@gmail.com
+DIGEST_TO=you@gmail.com
+```
+
+Resend, Brevo, Mailgun and Postmark all have free tiers and work the same way.
+Test it without waiting for tomorrow's run:
+
+```bash
+docker compose exec jobsearch jobsearch discover   # find and draft
+docker compose exec jobsearch jobsearch digest     # send the email now
+```
+
+If you'd rather get a phone push than an email, `jobsearch/notify/email.py` is
+the only place notification lives — a Telegram or ntfy sender slots in beside
+`send_digest` without touching anything else.
+
+### First week
+
+Run with `SUBMIT_MODE=dry_run` for a few days. Read what it queues and what it
+writes, check `/jobs?show=filtered` to see what it threw away and why, and tune
+`preferences` until the queue is mostly roles you'd genuinely apply to. Only
+then verify a submission recipe and switch to `live`.
+
+---
+
 ## Commands
 
 | Command | What it does |
@@ -255,7 +338,7 @@ you on the right side of that.
 
 ```bash
 pip install -e ".[dev]"
-pytest              # 138 tests, no network and no API key needed
+pytest              # 146 tests, no network and no API key needed
 ruff check jobsearch tests
 ruff format jobsearch tests
 ```

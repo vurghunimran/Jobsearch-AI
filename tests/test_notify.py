@@ -39,6 +39,24 @@ class TestDigestContent:
         assert "&lt;script&gt;" in html
 
 
+class TestTokenisedLinks:
+    """A digest opened on a phone must sign the reader in."""
+
+    def test_links_carry_the_token_when_one_is_set(self, rows, settings, monkeypatch):
+        monkeypatch.setattr(settings, "dashboard_token", "s3cret")
+        html = _html(rows, {}, settings)
+        text = _plain(rows, {}, settings)
+        assert "?token=s3cret" in html
+        assert "?token=s3cret" in text
+
+    def test_no_token_means_no_query_string(self, rows, settings):
+        assert "?token=" not in _html(rows, {}, settings)
+
+    def test_a_token_with_url_characters_is_escaped(self, rows, settings, monkeypatch):
+        monkeypatch.setattr(settings, "dashboard_token", "a b&c")
+        assert "?token=a%20b%26c" in _html(rows, {}, settings)
+
+
 class TestSending:
     def test_refuses_when_smtp_is_not_configured(self, settings, seeded):
         with pytest.raises(EmailNotConfigured, match="SMTP_HOST"):

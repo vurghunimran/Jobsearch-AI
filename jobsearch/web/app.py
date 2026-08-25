@@ -60,14 +60,12 @@ def get_session() -> Session:
         yield session
 
 
-def require_auth(request: Request) -> None:
-    """Shared-token gate. Disabled when DASHBOARD_TOKEN is unset."""
-    settings = get_settings()
-    if not settings.dashboard_token:
-        return
-    supplied = request.query_params.get("token") or request.cookies.get("jobsearch_token")
-    if supplied != settings.dashboard_token:
-        raise HTTPException(status_code=401, detail="Add ?token=... to the URL to sign in.")
+# Reachable without a token: the container health check, and static assets
+# (which the browser fetches without the query string).
+OPEN_PREFIXES = ("/healthz", "/static")
+
+TOKEN_COOKIE = "jobsearch_token"
+COOKIE_MAX_AGE = 60 * 60 * 24 * 30
 
 
 @asynccontextmanager
@@ -93,6 +91,38 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app = FastAPI(title="jobsearch-ai", lifespan=lifespan)
     app.mount("/static", StaticFiles(directory=str(HERE / "static")), name="static")
 
+    @app.middleware("http")
+    async def token_gate(request: Request, call_next):
+        """Shared-token gate. Disabled when DASHBOARD_TOKEN is unset.
+
+        A valid `?token=` is exchanged for a cookie, so a link tapped in the
+        digest email signs you in and every link from there on just works.
+        """
+        if not settings.dashboard_token or request.url.path.startswith(OPEN_PREFIXES):
+            return await call_next(request)
+
+        from_query = request.query_params.get("token")
+        supplied = from_query or request.cookies.get(TOKEN_COOKIE)
+        if supplied != settings.dashboard_token:
+            return HTMLResponse(
+                "<h1>401</h1><p>This dashboard needs a token. Open it from the link "
+                "in your digest email, or add <code>?token=...</code> to the URL.</p>",
+                status_code=401,
+            )
+
+        response = await call_next(request)
+        if from_query == settings.dashboard_token:
+            response.set_cookie(
+                TOKEN_COOKIE,
+                settings.dashboard_token,
+                max_age=COOKIE_MAX_AGE,
+                httponly=True,
+                samesite="lax",
+                # Only send the cookie over TLS when the dashboard is served over TLS.
+                secure=settings.resolved_base_url.startswith("https://"),
+            )
+        return response
+
     def render(request: Request, template: str, **context: Any) -> HTMLResponse:
         counts = _counts(context.get("session"))
         return templates.TemplateResponse(
@@ -103,7 +133,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     # ---------------------------------------------------------------- views
 
-    @app.get("/", response_class=HTMLResponse, dependencies=[Depends(require_auth)])
+    @app.get("/", response_class=HTMLResponse)
     def queue(request: Request, session: Session = Depends(get_session)):
         applications = session.exec(
             select(Application)
@@ -118,7 +148,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get(
         "/application/{application_id}",
         response_class=HTMLResponse,
-        dependencies=[Depends(require_auth)],
     )
     def detail(request: Request, application_id: int, session: Session = Depends(get_session)):
         application = _get(session, application_id)
@@ -137,7 +166,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             to_html=to_html,
         )
 
-    @app.get("/applications", response_class=HTMLResponse, dependencies=[Depends(require_auth)])
+    @app.get("/applications", response_class=HTMLResponse)
     def history(request: Request, status: str = "", session: Session = Depends(get_session)):
         query = select(Application).order_by(Application.created_at.desc())
         if status:
@@ -152,7 +181,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             labels=STATUS_LABELS,
         )
 
-    @app.get("/jobs", response_class=HTMLResponse, dependencies=[Depends(require_auth)])
+    @app.get("/jobs", response_class=HTMLResponse)
     def jobs(request: Request, show: str = "all", session: Session = Depends(get_session)):
         query = select(Job).order_by(Job.discovered_at.desc())
         if show == "filtered":
@@ -169,7 +198,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     # -------------------------------------------------------------- actions
 
-    @app.post("/application/{application_id}/approve", dependencies=[Depends(require_auth)])
+    @app.post("/application/{application_id}/approve")
     async def approve(application_id: int):
         with session_scope(settings) as session:
             application = _get(session, application_id)
@@ -180,7 +209,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             asyncio.create_task(_submit_later(application_id, settings))
         return _back(application_id)
 
-    @app.post("/application/{application_id}/reject", dependencies=[Depends(require_auth)])
+    @app.post("/application/{application_id}/reject")
     def reject(application_id: int, session: Session = Depends(get_session)):
         application = _get(session, application_id)
         application.status = ApplicationStatus.rejected
@@ -188,7 +217,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         session.add(application)
         return RedirectResponse("/", status_code=303)
 
-    @app.post("/application/{application_id}/submit", dependencies=[Depends(require_auth)])
+    @app.post("/application/{application_id}/submit")
     async def submit_now(application_id: int):
         with session_scope(settings) as session:
             application = _get(session, application_id)
@@ -197,7 +226,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.post(
         "/application/{application_id}/document/{document_id}",
-        dependencies=[Depends(require_auth)],
     )
     def save_document(
         application_id: int,
@@ -214,7 +242,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         session.add(document)
         return _back(application_id)
 
-    @app.post("/application/{application_id}/answers", dependencies=[Depends(require_auth)])
+    @app.post("/application/{application_id}/answers")
     async def save_answers(request: Request, application_id: int):
         form = await request.form()
         with session_scope(settings) as session:
@@ -232,12 +260,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             session.add(application)
         return _back(application_id)
 
-    @app.post("/application/{application_id}/regenerate", dependencies=[Depends(require_auth)])
+    @app.post("/application/{application_id}/regenerate")
     async def regenerate(application_id: int, note: str = Form(""), kind: str = Form("")):
         await asyncio.to_thread(_regenerate, application_id, note, kind, settings)
         return _back(application_id)
 
-    @app.post("/run", dependencies=[Depends(require_auth)])
+    @app.post("/run")
     async def run_now():
         asyncio.create_task(_run_discovery(settings))
         return RedirectResponse("/", status_code=303)
