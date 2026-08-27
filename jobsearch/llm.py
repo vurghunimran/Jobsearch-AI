@@ -46,13 +46,37 @@ def reset_client() -> None:
     _client = None
 
 
+def _api_message(exc: anthropic.APIStatusError) -> str:
+    """The human-readable reason the API gave, if it gave one."""
+    body = getattr(exc, "body", None)
+    if isinstance(body, dict):
+        error = body.get("error")
+        if isinstance(error, dict) and error.get("message"):
+            return str(error["message"])
+    return ""
+
+
 def _wrap(exc: Exception, what: str) -> LLMError:
+    """Turn an SDK exception into something worth reading in a log at 08:00.
+
+    A bare status code is useless to whoever has to fix it — the API almost
+    always says exactly what is wrong, so pass that through.
+    """
     if isinstance(exc, anthropic.RateLimitError):
         return LLMError(f"{what}: rate limited by the Claude API — try a smaller run.")
     if isinstance(exc, anthropic.AuthenticationError):
         return LLMError(f"{what}: Claude API rejected the key in ANTHROPIC_API_KEY.")
     if isinstance(exc, anthropic.APIStatusError):
-        return LLMError(f"{what}: Claude API returned HTTP {exc.status_code}.")
+        detail = _api_message(exc)
+        # By far the most common 400 in practice, and entirely actionable.
+        if "credit balance" in detail.lower():
+            return LLMError(
+                f"{what}: your Anthropic account is out of credit, so no jobs can be "
+                "scored and no documents written. The API key itself is fine — add "
+                "credit at https://console.anthropic.com/settings/billing."
+            )
+        suffix = f" {detail}" if detail else ""
+        return LLMError(f"{what}: Claude API returned HTTP {exc.status_code}.{suffix}")
     if isinstance(exc, anthropic.APIConnectionError):
         return LLMError(f"{what}: could not reach the Claude API ({exc}).")
     return LLMError(f"{what}: {type(exc).__name__}: {exc}")
