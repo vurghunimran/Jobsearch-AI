@@ -1,0 +1,57 @@
+# systemd unit for running jobsearch-ai natively (no Docker).
+#
+# Lighter than Docker on a Raspberry Pi — saves ~100 MB of RAM and starts
+# faster. Install:
+#
+#   sudo cp deploy/jobsearch.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now jobsearch
+#
+# Then: systemctl status jobsearch · journalctl -u jobsearch -f
+#
+# Adjust User and the paths below if you did not install to /home/pi.
+
+[Unit]
+Description=jobsearch-ai — finds jobs, drafts applications, applies on approval
+Documentation=https://github.com/vurghunimran/Jobsearch-AI
+# network-online (not just network) so job boards resolve on a cold boot.
+After=network-online.target
+Wants=network-online.target
+# A Pi can be slow to bring up networking after a power cut; never stop
+# retrying, or the daily search silently stays dead.
+StartLimitIntervalSec=0
+
+[Service]
+Type=exec
+User=pi
+Group=pi
+
+# WorkingDirectory matters: DATA_DIR defaults to ./data, so your CV, database
+# and generated packets land under the directory named here.
+WorkingDirectory=/home/pi/Jobsearch-AI
+EnvironmentFile=/home/pi/Jobsearch-AI/.env
+ExecStart=/home/pi/Jobsearch-AI/.venv/bin/jobsearch serve
+
+Restart=on-failure
+RestartSec=30s
+
+# The scheduler holds state in memory between runs, so let it finish cleanly.
+KillSignal=SIGINT
+TimeoutStopSec=30
+
+# Hardening: the agent only ever needs to write inside its own directory.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=read-only
+ReadWritePaths=/home/pi/Jobsearch-AI/data
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=jobsearch
+
+[Install]
+WantedBy=multi-user.target

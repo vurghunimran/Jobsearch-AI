@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% block title %}{{ job.title }} · {{ job.company }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <a class="back" href="/">&larr; Queue</a>
+  <h1>{{ job.title }}</h1>
+  <p class="meta">
+    {{ job.company }}
+    {%- if job.location %} · {{ job.location }}{% endif %}
+    {%- if job.remote_type %} · {{ job.remote_type }}{% endif %}
+    {%- if job.salary_text %} · {{ job.salary_text }}{% endif %}
+    · <span class="src">{{ job.source }}</span>
+    {% if job.url %} · <a href="{{ job.url }}" target="_blank" rel="noreferrer">original posting</a>{% endif %}
+  </p>
+  <p><span class="pill {{ status[1] }}">{{ status[0] }}</span>
+     {% if job.score is not none %}<span class="pill">{{ job.score }}% · {{ job.verdict }}</span>{% endif %}
+     <span class="pill">apply via {{ job.ats.value }}</span></p>
+</div>
+
+{% if application.error %}<div class="alert bad">{{ application.error }}</div>{% endif %}
+{% if application.packet_dir %}
+  <div class="alert warn">Packet ready on disk: <code>{{ application.packet_dir }}</code></div>
+{% endif %}
+
+<section class="panel">
+  <h3>Why this matched</h3>
+  <p>{{ job.rationale }}</p>
+  {% if job.strengths %}<p><b>Strengths:</b> {{ job.strengths|join(' · ') }}</p>{% endif %}
+  {% if job.gaps %}<p><b>Gaps:</b> {{ job.gaps|join(' · ') }}</p>{% endif %}
+  {% if job.red_flags %}<p class="warn-text"><b>Red flags:</b> {{ job.red_flags|join(' · ') }}</p>{% endif %}
+</section>
+
+{% for document in documents %}
+<section class="panel">
+  <h3>{{ document.title }}
+    {% if document.edited_by_user %}<span class="pill ok">edited by you</span>{% endif %}
+  </h3>
+  <form method="post" action="/application/{{ application.id }}/document/{{ document.id }}">
+    <textarea name="content" rows="16">{{ document.content }}</textarea>
+    <div class="row">
+      <button class="btn">Save edits</button>
+      <span class="muted small">{{ document.content.split()|length }} words</span>
+    </div>
+  </form>
+</section>
+{% endfor %}
+
+{% if application.answers %}
+<section class="panel">
+  <h3>Screening questions</h3>
+  <form method="post" action="/application/{{ application.id }}/answers">
+    {% for answer in application.answers %}
+      <div class="qa {{ 'needs-check' if answer.needs_human else '' }}">
+        <label for="answer_{{ loop.index0 }}">{{ answer.question }}</label>
+        {% if answer.needs_human %}
+          <p class="warn-text small">Guessed{% if answer.note %} — {{ answer.note.rstrip('.') }}{% endif %}.
+             Editing or saving this marks it confirmed.</p>
+        {% endif %}
+        <textarea id="answer_{{ loop.index0 }}" name="answer_{{ loop.index0 }}" rows="2">{{ answer.answer }}</textarea>
+      </div>
+    {% endfor %}
+    <button class="btn">Save answers</button>
+  </form>
+</section>
+{% endif %}
+
+<section class="panel">
+  <h3>Ask for a rewrite</h3>
+  <form method="post" action="/application/{{ application.id }}/regenerate">
+    <textarea name="note" rows="3"
+      placeholder="e.g. Lead with the payments work, drop the university project, keep it under 250 words."></textarea>
+    <button class="btn">Rewrite documents</button>
+  </form>
+</section>
+
+<div class="sticky-actions">
+  <form method="post" action="/application/{{ application.id }}/approve" class="inline">
+    <button class="btn primary">Approve &amp; apply</button>
+  </form>
+  <form method="post" action="/application/{{ application.id }}/reject" class="inline">
+    <button class="btn quiet">Skip this one</button>
+  </form>
+  <form method="post" action="/application/{{ application.id }}/submit" class="inline">
+    <button class="btn quiet" title="Run the submission step again">Retry submission</button>
+  </form>
+</div>
+
+{% if application.submit_log %}
+<section class="panel">
+  <h3>Submission log</h3>
+  {% for entry in application.submit_log %}
+    <details>
+      <summary><b>{{ entry.status }}</b> — {{ entry.detail }} <span class="muted">({{ entry.mode }})</span></summary>
+      <pre>{{ entry.request | tojson(indent=2) }}</pre>
+    </details>
+  {% endfor %}
+</section>
+{% endif %}
+
+<section class="panel">
+  <h3>Job description</h3>
+  <details><summary>Show full text</summary><pre class="jd">{{ job.description }}</pre></details>
+</section>
+{% endblock %}

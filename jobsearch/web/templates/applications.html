@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}History · jobsearch-ai{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>Application history</h1>
+  <p class="filters">
+    <a href="/applications" class="{{ 'on' if not status }}">All</a>
+    {% for value, label in [('submitted','Submitted'), ('needs_manual','Needs you'),
+                            ('dry_run','Dry runs'), ('rejected','Skipped'), ('failed','Failed')] %}
+      <a href="/applications?status={{ value }}" class="{{ 'on' if status == value }}">{{ label }}</a>
+    {% endfor %}
+  </p>
+</div>
+
+{% if not rows %}<div class="empty"><p>Nothing here yet.</p></div>{% endif %}
+
+<table class="grid">
+  <thead><tr><th>Role</th><th>Company</th><th>Fit</th><th>Status</th><th>When</th></tr></thead>
+  <tbody>
+  {% for row in rows %}
+    <tr>
+      <td><a href="/application/{{ row.application.id }}">{{ row.job.title }}</a></td>
+      <td>{{ row.job.company }}</td>
+      <td>{{ row.job.score or '—' }}</td>
+      <td><span class="pill {{ row.status[1] }}">{{ row.status[0] }}</span></td>
+      <td class="muted">{{ row.application.created_at.strftime('%d %b') }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

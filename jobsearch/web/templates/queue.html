@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}Review queue · jobsearch-ai{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>Review queue</h1>
+  {% if last_run %}
+    <p class="muted">
+      Last search {{ last_run.started_at.strftime('%d %b %H:%M') }} —
+      {{ last_run.stats.get('fetched', 0) }} postings scanned,
+      {{ last_run.stats.get('new', 0) }} new,
+      {{ last_run.stats.get('filtered_out', 0) }} filtered out,
+      {{ last_run.stats.get('queued', 0) }} queued.
+      {% if last_run.source_errors %}
+        <span class="warn-text">{{ last_run.source_errors|length }} source(s) failed.</span>
+      {% endif %}
+    </p>
+  {% endif %}
+</div>
+
+{% if not rows %}
+  <div class="empty">
+    <p>Nothing waiting for you.</p>
+    <p class="muted">Run a search, or widen <code>preferences</code> in <code>data/profile.yaml</code>.</p>
+  </div>
+{% endif %}
+
+{% for row in rows %}
+  {% set job = row.job %}
+  <article class="card">
+    <div class="card-main">
+      <div class="score {{ 'high' if (job.score or 0) >= 85 else 'mid' if (job.score or 0) >= 70 else 'low' }}">
+        <b>{{ job.score or '—' }}</b><span>{{ job.verdict or 'unscored' }}</span>
+      </div>
+      <div class="card-body">
+        <h2><a href="/application/{{ row.application.id }}">{{ job.title }}</a></h2>
+        <p class="meta">
+          {{ job.company }}
+          {%- if job.location %} · {{ job.location }}{% endif %}
+          {%- if job.remote_type %} · {{ job.remote_type }}{% endif %}
+          {%- if job.employment_type %} · {{ job.employment_type.replace('_','-') }}{% endif %}
+          · <span class="src">{{ job.source }}</span>
+        </p>
+        <p class="rationale">{{ job.rationale }}</p>
+        {% if job.gaps %}
+          <p class="gaps"><b>Gaps:</b> {{ job.gaps|join(' · ') }}</p>
+        {% endif %}
+        <p class="muted small">{{ row.documents }} document(s) drafted{% if row.application.answers %},
+          {{ row.application.answers|length }} screening answer(s){% endif %}
+          {%- set unresolved = row.application.answers | selectattr('needs_human') | list %}
+          {%- if unresolved %} — <span class="warn-text">{{ unresolved|length }} need your check</span>{% endif %}
+        </p>
+      </div>
+    </div>
+    <div class="card-actions">
+      <a class="btn" href="/application/{{ row.application.id }}">Review</a>
+      <form method="post" action="/application/{{ row.application.id }}/approve" class="inline">
+        <button class="btn primary">Approve</button>
+      </form>
+      <form method="post" action="/application/{{ row.application.id }}/reject" class="inline">
+        <button class="btn quiet">Skip</button>
+      </form>
+    </div>
+  </article>
+{% endfor %}
+{% endblock %}
