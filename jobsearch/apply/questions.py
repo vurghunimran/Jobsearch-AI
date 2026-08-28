@@ -12,7 +12,7 @@ from jobsearch.sources.greenhouse import fetch_questions as fetch_greenhouse_que
 
 log = logging.getLogger(__name__)
 
-# Fields the recipe's field_map already fills in. Asking Claude to answer
+# Fields the recipe's field_map already fills in. Asking the model to answer
 # "First Name" would be daft.
 BUILTIN_FIELDS = {
     "first_name",

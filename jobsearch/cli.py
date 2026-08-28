@@ -45,7 +45,7 @@ def init(force: bool = typer.Option(False, help="Overwrite an existing profile.y
         f"  1. Put your CV in [bold]{settings.cv_dir}[/bold]\n"
         "     and set [bold]cv_file[/bold] to its filename.\n"
         f"  2. Fill in {path} — especially [bold]preferences[/bold] and [bold]sources[/bold].\n"
-        "  3. Put ANTHROPIC_API_KEY in [bold].env[/bold] (copy .env.example).\n"
+        "  3. Put OPENAI_API_KEY in [bold].env[/bold] (copy .env.example).\n"
         "  4. Run [bold]jobsearch doctor[/bold] to check everything is wired up."
     )
 
@@ -63,10 +63,12 @@ def doctor(verbose: bool = typer.Option(False, "--verbose", "-v")) -> None:
     problems = 0
 
     console.print("[bold]Configuration[/bold]")
-    key = settings.anthropic_api_key
-    console.print(f"  ANTHROPIC_API_KEY  {'set' if key else '[red]MISSING[/red]'}")
+    key = settings.openai_api_key
+    console.print(f"  OPENAI_API_KEY     {'set' if key else '[red]MISSING[/red]'}")
     problems += 0 if key else 1
-    console.print(f"  Model              {settings.model}")
+    console.print(f"  Writing model      {settings.model}")
+    console.print(f"  Scoring model      {settings.scoring_model or settings.model + ' (same)'}")
+    problems += _check_models(settings)
     console.print(f"  Database           {settings.resolved_database_url}")
     console.print(f"  Submit mode        {settings.submit_mode.value}")
     console.print(
@@ -146,6 +148,46 @@ def doctor(verbose: bool = typer.Option(False, "--verbose", "-v")) -> None:
         )
         raise typer.Exit(1)
     console.print("[green]Everything checks out.[/green]")
+
+
+def _check_models(settings) -> int:
+    """Confirm the configured models exist on this account.
+
+    A wrong model id otherwise fails at 08:00 on the first real run, which is
+    the worst possible moment to discover a typo.
+    """
+    from jobsearch.llm import LLMError, list_models
+
+    if not settings.openai_api_key:
+        return 0
+    try:
+        available = list_models(settings)
+    except LLMError as exc:
+        console.print(f"  Models             [red]could not list: {exc}[/red]")
+        return 1
+
+    problems = 0
+    wanted = {"writing": settings.model}
+    if settings.scoring_model:
+        wanted["scoring"] = settings.scoring_model
+    for role, name in wanted.items():
+        if name in available:
+            console.print(f"  {role.title()} model ok    [green]{name}[/green]")
+        else:
+            console.print(f"  {role.title()} model       [red]{name} is not available[/red]")
+            problems += 1
+    if problems:
+        chat = [
+            m
+            for m in available
+            if not any(
+                x in m
+                for x in ("embedding", "whisper", "tts", "dall-e", "moderation", "audio", "image")
+            )
+        ]
+        console.print(f"  Available to you:  {', '.join(chat[:18]) or '(none listed)'}")
+        console.print("  [yellow]Set MODEL in .env to one of the above.[/yellow]")
+    return problems
 
 
 @app.command()

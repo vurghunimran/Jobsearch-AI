@@ -1,6 +1,6 @@
 """End-to-end pipeline: discovery -> filter -> score -> documents -> queue.
 
-Claude and the network are stubbed; everything else is the real code path.
+The model and the network are stubbed; everything else is the real code path.
 """
 
 from datetime import UTC, datetime
@@ -53,7 +53,7 @@ def fit(score: int, red_flags=None) -> JobFit:
 
 @pytest.fixture
 def stub_pipeline(monkeypatch):
-    """Replace the network and every Claude call with deterministic stubs."""
+    """Replace the network and every model call with deterministic stubs."""
     state = {"raw": [], "scores": {}, "documents": 0, "answers": []}
 
     async def fake_fetch_all(sources, settings=None):
@@ -208,7 +208,7 @@ class TestResilience:
 
         def explode_for_alpha(kinds, job, profile, cv, note="", settings=None):
             if job.company == "AlphaCo":
-                raise RuntimeError("Claude is down")
+                raise RuntimeError("the model provider is down")
             return [GeneratedDocument(DocumentKind.cover_letter, "Cover letter", "Body.")]
 
         monkeypatch.setattr("jobsearch.pipeline.generate_documents", explode_for_alpha)

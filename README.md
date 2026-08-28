@@ -22,7 +22,7 @@ your name without that click.
     │   filter    │
     └──────┬──────┘
            ▼
-    ┌─────────────┐   Claude scores fit 0-100 against your actual CV
+    ┌─────────────┐   the model scores fit 0-100 vs your CV
     │    score    │
     └──────┬──────┘
            ▼
@@ -46,7 +46,7 @@ your name without that click.
 ```bash
 git clone <this repo> && cd Jobsearch-AI
 
-cp .env.example .env          # add your ANTHROPIC_API_KEY
+cp .env.example .env          # add your OPENAI_API_KEY
 docker compose run --rm jobsearch jobsearch init
 
 # 1. put your CV in data/cv/         (PDF, DOCX, TXT or MD)
@@ -103,6 +103,39 @@ coming back to you.
 Your API key and the operational settings — score threshold, daily cap,
 schedule, submission mode, SMTP. All documented inline in `.env.example`.
 
+### Models and what they cost
+
+Two models, because the two jobs are different:
+
+| | Setting | Runs | Effort |
+|---|---|---|---|
+| **Scoring** | `SCORING_MODEL` | once per candidate job — hundreds a day | `SCORING_EFFORT=low` |
+| **Writing** | `MODEL` | only on matches — a handful a day | `WRITING_EFFORT=high` |
+
+Scoring dominates the bill because it is per-job. It is also triage rather than
+craft, so a smaller, cheaper model there is the single biggest lever you have.
+Leave `SCORING_MODEL` empty and both jobs use `MODEL`.
+
+Run `jobsearch doctor` before your first real run: it lists the models your
+account can actually use and flags an id it does not recognise, rather than
+letting a typo fail at 08:00 on the first scheduled search.
+
+Three ways to spend less, cheapest first:
+
+1. **Tighten `preferences`.** Hard filters run *before* any API call, so a
+   specific list of `titles` and `locations` means most postings never reach a
+   model at all. This is free.
+2. **Lower the caps.** `MAX_JOBS_SCORED_PER_RUN` and
+   `MAX_NEW_APPLICATIONS_PER_DAY` are the ceilings. Nobody applies to fifteen
+   jobs a day; five is a realistic number and costs a third as much.
+3. **Use a cheaper `SCORING_MODEL`.** Quality where it matters, economy where
+   it does not.
+
+Each scoring call re-sends your CV and profile unchanged, with only the job
+description varying — so a provider-side prompt cache, if your model supports
+one, pays off here more than anywhere else.
+
+
 ---
 
 ## Where it searches
@@ -137,7 +170,7 @@ A posting reaches your queue only if it passes **both** gates:
    requirements. These are cheap, run first, and cost nothing. Every rejection
    records *why*, visible at `/jobs?show=filtered` — that page is the fastest
    way to work out why your queue is empty or full of noise.
-2. **Fit score** — Claude reads the posting against your CV and scores it
+2. **Fit score** — the model reads the posting against your CV and scores it
    0-100 with a rationale, strengths, gaps and red flags. Anything below
    `MIN_SCORE` (default 70), or with a red flag such as an eligibility
    requirement you cannot meet, is kept but not queued.
@@ -149,7 +182,7 @@ the cap is spent on the highest-scoring matches first.
 
 ## What it writes
 
-Claude picks what the posting actually calls for — a cover letter for most
+The model picks what the posting actually calls for — a cover letter for most
 roles, a statement of purpose for academic and fellowship applications, a
 motivation letter where that is the convention — and writes it from your CV
 and profile.
@@ -220,7 +253,7 @@ What it needs:
 - an always-on process (not serverless, not scale-to-zero)
 - a persistent disk for `data/` — SQLite, your CV, and generated packets
 - 512 MB RAM is enough, 1 GB comfortable; CPU is near-idle between runs
-- outbound HTTPS to the job boards and the Claude API
+- outbound HTTPS to the job boards and the OpenAI API
 
 | Where | Cost | Notes |
 |---|---|---|
@@ -252,7 +285,7 @@ cd ~/Jobsearch-AI
 python3 -m venv .venv
 .venv/bin/pip install -e .
 
-cp .env.example .env        # add ANTHROPIC_API_KEY and your SMTP details
+cp .env.example .env        # add OPENAI_API_KEY and your SMTP details
 .venv/bin/jobsearch init    # writes data/profile.yaml
 # put your CV in data/cv/, then fill in data/profile.yaml
 .venv/bin/jobsearch doctor
@@ -389,7 +422,7 @@ which is git-ignored and, under Docker, a local volume. The dashboard binds to
 `127.0.0.1` only. Set `DASHBOARD_TOKEN` if the port is reachable by anyone
 else.
 
-Your CV and profile are sent to the Claude API to score jobs and write
+Your CV and profile are sent to the OpenAI API to score jobs and write
 documents, and to an employer only when you approve that specific application.
 The dashboard and the digest email load no third-party assets.
 
@@ -411,12 +444,12 @@ you on the right side of that.
 
 ```bash
 pip install -e ".[dev]"
-pytest              # 149 tests, no network and no API key needed
+pytest              # 171 tests, no network and no API key needed
 ruff check jobsearch tests
 ruff format jobsearch tests
 ```
 
-The test suite stubs Claude and mocks HTTP, so it runs offline. Connector tests
+The test suite stubs the model and mocks HTTP, so it runs offline. Connector tests
 assert against realistic API payloads, which is what catches a source changing
 its response shape.
 
@@ -425,7 +458,7 @@ jobsearch/
 ├── config.py          settings
 ├── logging_setup.py   log config (uvicorn only configures its own)
 ├── models.py          database tables
-├── llm.py             Claude wrapper
+├── llm.py             OpenAI wrapper
 ├── pipeline.py        the daily run
 ├── scheduler.py       cron
 ├── cli.py             commands

@@ -1,7 +1,7 @@
 """The single YAML file that describes you: CV, personal data, and what you want.
 
 Everything the agent knows about you comes from `data/profile.yaml` plus the CV
-file(s) it points at. Nothing here is ever sent anywhere except to Claude (to
+file(s) it points at. Nothing here is ever sent anywhere except to the model provider (to
 write your documents) and to the ATS you approve an application for.
 """
 

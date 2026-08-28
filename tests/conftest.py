@@ -12,7 +12,7 @@ def settings(tmp_path, monkeypatch):
     from jobsearch.config import get_settings
 
     monkeypatch.setenv("DATA_DIR", str(tmp_path / "data"))
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test-not-real")
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test-not-real")
     monkeypatch.setenv("SUBMIT_MODE", "dry_run")
     monkeypatch.setenv("AUTO_SUBMIT_ON_APPROVAL", "false")
     monkeypatch.setenv("DASHBOARD_TOKEN", "")

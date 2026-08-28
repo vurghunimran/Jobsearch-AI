@@ -5,7 +5,7 @@ description = "An AI agent that finds jobs matching your preferences, writes tai
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
-    "anthropic>=0.40",
+    "openai>=2.0",
     "fastapi>=0.115",
     "uvicorn[standard]>=0.32",
     "jinja2>=3.1",

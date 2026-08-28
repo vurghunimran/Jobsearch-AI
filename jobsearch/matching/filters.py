@@ -1,6 +1,6 @@
 """Hard preference filters.
 
-These run before any Claude call. Their job is to be cheap, predictable and
+These run before any model call. Their job is to be cheap, predictable and
 explainable: every rejected posting keeps a human-readable reason, so when the
 queue looks wrong you can see exactly which rule did it.
 """

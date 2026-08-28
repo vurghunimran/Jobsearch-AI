@@ -36,13 +36,24 @@ class Settings(BaseSettings):
     """
     database_url: str = ""
 
-    # --- Claude --------------------------------------------------------
-    anthropic_api_key: str = ""
-    model: str = "claude-opus-5"
+    # --- Model provider -------------------------------------------------
+    openai_api_key: str = ""
+    openai_base_url: str = ""
+    """Override only for an OpenAI-compatible gateway. Empty means OpenAI itself."""
+    llm_timeout: float = 180.0
+
+    model: str = "gpt-5"
+    """Used for writing. Verify with `jobsearch doctor` — it lists what your
+    account can actually use and flags an unrecognised id."""
+    scoring_model: str = ""
+    """Optional cheaper model for the high-volume scoring pass. Falls back to
+    `model`. Scoring runs on every candidate job and dominates the bill, so a
+    smaller model here is the single biggest cost lever."""
+
     scoring_effort: str = "low"
-    """Effort for the high-volume fit-scoring pass. Runs on every candidate job."""
+    """Reasoning effort for fit scoring. Runs on every candidate job."""
     writing_effort: str = "high"
-    """Effort for cover letters and statements of purpose. Runs only on matches."""
+    """Reasoning effort for letters. Runs only on matches."""
 
     # --- Dashboard -----------------------------------------------------
     dashboard_host: str = "127.0.0.1"
@@ -91,7 +102,7 @@ class Settings(BaseSettings):
     @field_validator("scoring_effort", "writing_effort")
     @classmethod
     def _valid_effort(cls, v: str) -> str:
-        allowed = {"low", "medium", "high", "xhigh", "max"}
+        allowed = {"none", "minimal", "low", "medium", "high", "xhigh", "max"}
         if v not in allowed:
             raise ValueError(f"effort must be one of {sorted(allowed)}, got {v!r}")
         return v

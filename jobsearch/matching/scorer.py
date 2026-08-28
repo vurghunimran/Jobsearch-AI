@@ -1,4 +1,4 @@
-"""Claude-backed fit scoring.
+"""Model-backed fit scoring.
 
 Runs on every posting that survives the hard filters. The score decides what
 reaches your review queue; the rationale is shown next to it so you can tell
@@ -30,7 +30,7 @@ DocumentKindName = Literal[
 
 
 class JobFit(BaseModel):
-    """Claude's assessment of one posting against the candidate's profile."""
+    """The model's assessment of one posting against the candidate's profile."""
 
     score: int = Field(ge=0, le=100, description="Overall fit, 0-100.")
     verdict: Literal["strong", "good", "stretch", "poor"]
